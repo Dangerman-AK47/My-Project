@@ -83,8 +83,16 @@ function ActivityBars({ activity, max }: { activity: { date: string; count: numb
 }
 
 export default async function AdminDashboardOverviewPage() {
-  const [deviceCounts, requestCounts, uploadStats, recentUploads, recentRequests, activity] =
-    await Promise.all([
+  let deviceCounts = { total: 0, active: 0, deactive: 0 };
+  let requestCounts = { pending: 0, approved: 0, rejected: 0, cancelled: 0 };
+  let uploadStats = { totalFiles: 0, totalStorageBytes: 0, last24h: 0 };
+  let recentUploads: any[] = [];
+  let recentRequests: any[] = [];
+  let activity: { date: string; count: number }[] = [];
+  let loadError: string | null = null;
+
+  try {
+    const results = await Promise.all([
       getDeviceStatusCounts(),
       getRequestStatusCounts(),
       getUploadSummaryStats(),
@@ -92,11 +100,27 @@ export default async function AdminDashboardOverviewPage() {
       listRecentRequests(5),
       getUploadActivityByDay(7),
     ]);
+    deviceCounts = results[0];
+    requestCounts = results[1];
+    uploadStats = results[2];
+    recentUploads = results[3];
+    recentRequests = results[4];
+    activity = results[5];
+  } catch (err: any) {
+    console.error("Failed to load dashboard metrics:", err);
+    loadError = err?.message || "Failed to load some metrics from the database.";
+  }
 
-  const maxActivityCount = Math.max(1, ...activity.map((day) => day.count));
+  const maxActivityCount = Math.max(1, ...(activity?.map((day) => day.count) || [1]));
 
   return (
     <div className="flex flex-col gap-6">
+      {loadError && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900">
+          <p className="font-semibold">Notice: Telemetry synchronization notice</p>
+          <p className="mt-1 font-mono text-[11px] text-amber-800">{loadError}</p>
+        </div>
+      )}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         <StatCard label="Total sensors" value={deviceCounts.total} icon={Activity} />
         <StatCard

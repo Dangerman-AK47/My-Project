@@ -77,20 +77,37 @@ export async function getAuthorizedAdmin(): Promise<AuthorizedAdmin | null> {
   const payload = await getSessionPayload();
   if (!payload) return null;
 
-  const account = await prisma.adminAccount.findUnique({
-    where: { id: payload.sub },
-    select: { id: true, username: true, role: true, isActive: true },
-  });
+  try {
+    const account = await prisma.adminAccount.findUnique({
+      where: { id: payload.sub },
+      select: { id: true, username: true, role: true, isActive: true },
+    });
 
-  if (!account || !account.isActive) return null;
+    if (!account || !account.isActive) {
+      try {
+        clearSession();
+      } catch {
+        // cookies() may be read-only
+      }
+      return null;
+    }
 
-  return { id: account.id, username: account.username, role: account.role };
+    return { id: account.id, username: account.username, role: account.role };
+  } catch (err) {
+    console.error("Failed to query authorized admin from DB:", err);
+    return null;
+  }
 }
 
 /** For Server Components/pages: redirects to /admin/login if not authorized. */
 export async function requireAdminSession(): Promise<AuthorizedAdmin> {
   const admin = await getAuthorizedAdmin();
   if (!admin) {
+    try {
+      clearSession();
+    } catch {
+      // cookies() may be read-only
+    }
     redirect("/admin/login");
   }
   return admin;

@@ -21,6 +21,11 @@ export async function middleware(request: NextRequest) {
   const session = await verifySessionToken(token);
 
   if (session) {
+    if (isLoginRoute && (request.nextUrl.searchParams.has("clear") || request.nextUrl.searchParams.has("force"))) {
+      const response = NextResponse.next();
+      response.cookies.delete(SESSION_COOKIE_NAME);
+      return response;
+    }
     if (isLoginRoute || pathname === "/admin" || pathname === "/admin/") {
       return NextResponse.redirect(new URL("/admin/dashboard", request.url));
     }
