@@ -1,0 +1,294 @@
+// FileVault database schema — Part 2 & Sensor Platform v3.
+//
+// Models:
+//   AdminAccount                  - admin users who can log in to the dashboard
+//   RegisteredDevice              - a sensor approved to submit uploads & fetch configs
+//   DeviceRegistrationRequest     - a sensor's request to become registered
+//   UploadedFileRecord            - metadata for one uploaded file
+//   UploadStorageObject           - physical storage location(s) of a file
+//   DeviceStatusEvent             - audit trail of a sensor's ACTIVE/DEACTIVE transitions
+//   AdminAuditEvent               - general admin action audit log
+//   GlobalSensorConfiguration     - versioned global config files uploaded by admin
+//   GlobalConfigStorageObject     - storage pointer for global config files
+//   SensorConfigDownloadEvent     - log of config download calls by sensors
+//   SensorVersionCheckEvent       - log of version-check calls by sensors
+//   DailySensorVersionCheckMetric - pre-aggregated daily counts of version-check results
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum AdminRole {
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum DeviceStatus {
+  ACTIVE
+  DEACTIVE
+}
+
+enum RegistrationRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+  AUTO_APPROVED
+}
+
+enum UploadStatus {
+  PENDING
+  STORED
+  FAILED
+}
+
+enum ConfigurationStatus {
+  INACTIVE
+  ACTIVE
+  ARCHIVED
+}
+
+enum VersionCheckResult {
+  CURRENT
+  UPDATE_AVAILABLE
+  SENSOR_DEACTIVATED
+  NO_CONFIGURATION_AVAILABLE
+  INVALID_VERSION
+  SENSOR_NOT_REGISTERED
+}
+
+model AdminAccount {
+  id           String    @id @default(cuid())
+  username     String    @unique
+  passwordHash String
+  role         AdminRole @default(ADMIN)
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  lastLoginAt  DateTime?
+
+  reviewedRequests       DeviceRegistrationRequest[] @relation("RequestReviewedByAdmin")
+  deviceStatusChanges    DeviceStatusEvent[]         @relation("StatusChangedByAdmin")
+  auditEvents            AdminAuditEvent[]           @relation("AuditEventByAdmin")
+  uploadedGlobalConfigs  GlobalSensorConfiguration[] @relation("GlobalConfigUploadedBy")
+  activatedGlobalConfigs GlobalSensorConfiguration[] @relation("GlobalConfigActivatedBy")
+
+  @@map("fv_admin_accounts")
+}
+
+model RegisteredDevice {
+  id                String       @id @default(cuid())
+  deviceId          String       @unique
+  status            DeviceStatus @default(ACTIVE)
+  registeredAt      DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  lastUploadAt      DateTime?
+  uploadCount       Int          @default(0)
+  totalStorageBytes BigInt       @default(0)
+
+  // Sensor telemetry & auth
+  tokenHash         String?
+  firstSeenAt       DateTime?
+  lastSeenAt        DateTime?
+  sensorVersion     String?
+  firmwareVersion   String?
+  hardwareModel     String?
+  metadata          Json?
+
+  uploadedFiles     UploadedFileRecord[]
+  statusEvents      DeviceStatusEvent[]
+  versionChecks     SensorVersionCheckEvent[]
+  configDownloads   SensorConfigDownloadEvent[]
+
+  @@index([status])
+  @@map("fv_registered_devices")
+}
+
+model DeviceRegistrationRequest {
+  id                String                    @id @default(cuid())
+  deviceId          String
+  status            RegistrationRequestStatus @default(PENDING)
+  submittedAt       DateTime                  @default(now())
+  reviewedAt        DateTime?
+  reviewReason      String?
+  requesterMetadata Json?
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+
+  reviewedByAdminId String?
+  reviewedByAdmin   AdminAccount?             @relation("RequestReviewedByAdmin", fields: [reviewedByAdminId], references: [id], onDelete: SetNull)
+
+  pendingDeviceKey  String?                   @unique
+
+  @@index([deviceId])
+  @@index([status])
+  @@map("fv_device_registration_requests")
+}
+
+model UploadedFileRecord {
+  id             String       @id @default(cuid())
+  uploadRecordId String       @unique @default(cuid())
+  sequenceNumber Int          @unique @default(autoincrement())
+
+  registeredDeviceId String
+  registeredDevice   RegisteredDevice @relation(fields: [registeredDeviceId], references: [id], onDelete: Cascade)
+  deviceId           String
+
+  originalFileName String
+  storageKey       String
+  mimeType         String
+  fileExtension    String
+  fileSizeBytes    Int
+  checksum         String?
+
+  uploadStatus UploadStatus @default(STORED)
+  uploadedAt   DateTime     @default(now())
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  storageObjects UploadStorageObject[]
+
+  @@index([registeredDeviceId])
+  @@index([deviceId])
+  @@index([uploadedAt])
+  @@index([uploadStatus])
+  @@index([mimeType])
+  @@map("fv_uploaded_file_records")
+}
+
+model UploadStorageObject {
+  id                   String             @id @default(cuid())
+  uploadedFileRecordId String
+  uploadedFileRecord   UploadedFileRecord @relation(fields: [uploadedFileRecordId], references: [id], onDelete: Cascade)
+  storageProvider      String             @default("local")
+  storageKey           String
+  createdAt            DateTime           @default(now())
+
+  @@index([uploadedFileRecordId])
+  @@map("fv_upload_storage_objects")
+}
+
+model DeviceStatusEvent {
+  id                 String           @id @default(cuid())
+  registeredDeviceId String
+  registeredDevice   RegisteredDevice @relation(fields: [registeredDeviceId], references: [id], onDelete: Cascade)
+  previousStatus     DeviceStatus?
+  newStatus          DeviceStatus
+  changedByAdminId   String?
+  changedByAdmin     AdminAccount?    @relation("StatusChangedByAdmin", fields: [changedByAdminId], references: [id], onDelete: SetNull)
+  reason             String?
+  createdAt          DateTime         @default(now())
+
+  @@index([registeredDeviceId])
+  @@map("fv_device_status_events")
+}
+
+model AdminAuditEvent {
+  id         String        @id @default(cuid())
+  adminId    String?
+  admin      AdminAccount? @relation("AuditEventByAdmin", fields: [adminId], references: [id], onDelete: SetNull)
+  action     String
+  entityType String
+  entityId   String?
+  metadata   Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime      @default(now())
+
+  @@index([createdAt])
+  @@index([entityType, entityId])
+  @@map("fv_admin_audit_events")
+}
+
+model GlobalSensorConfiguration {
+  id                 String              @id @default(cuid())
+  configVersion      String              @unique
+  status             ConfigurationStatus @default(INACTIVE)
+  originalFileName   String
+  storageKey         String
+  mimeType           String
+  fileSizeBytes      Int
+  checksum           String?
+  uploadedByAdminId  String?
+  uploadedByAdmin    AdminAccount?       @relation("GlobalConfigUploadedBy", fields: [uploadedByAdminId], references: [id], onDelete: SetNull)
+  activatedByAdminId String?
+  activatedByAdmin   AdminAccount?       @relation("GlobalConfigActivatedBy", fields: [activatedByAdminId], references: [id], onDelete: SetNull)
+  activatedAt        DateTime?
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  storageObjects     GlobalConfigStorageObject[]
+  downloadEvents     SensorConfigDownloadEvent[]
+
+  @@index([status])
+  @@map("fv_global_sensor_configurations")
+}
+
+model GlobalConfigStorageObject {
+  id              String                    @id @default(cuid())
+  globalConfigId  String
+  globalConfig    GlobalSensorConfiguration @relation(fields: [globalConfigId], references: [id], onDelete: Cascade)
+  storageProvider String                    @default("local")
+  storageKey      String
+  createdAt       DateTime                  @default(now())
+
+  @@index([globalConfigId])
+  @@map("fv_global_config_storage_objects")
+}
+
+model SensorConfigDownloadEvent {
+  id                  String                     @id @default(cuid())
+  registeredDeviceId  String?
+  registeredDevice    RegisteredDevice?          @relation(fields: [registeredDeviceId], references: [id], onDelete: SetNull)
+  deviceId            String
+  globalConfigId      String?
+  globalConfig        GlobalSensorConfiguration? @relation(fields: [globalConfigId], references: [id], onDelete: SetNull)
+  configVersion       String?
+  ipAddress           String?
+  userAgent           String?
+  createdAt           DateTime                   @default(now())
+
+  @@index([registeredDeviceId])
+  @@index([deviceId])
+  @@index([createdAt])
+  @@map("fv_sensor_config_download_events")
+}
+
+model SensorVersionCheckEvent {
+  id                  String             @id @default(cuid())
+  registeredDeviceId  String?
+  registeredDevice    RegisteredDevice?  @relation(fields: [registeredDeviceId], references: [id], onDelete: SetNull)
+  deviceId            String
+  result              VersionCheckResult
+  reportedVersion     String?
+  activeConfigVersion String?
+  ipAddress           String?
+  userAgent           String?
+  createdAt           DateTime           @default(now())
+
+  @@index([registeredDeviceId])
+  @@index([deviceId])
+  @@index([createdAt])
+  @@index([result])
+  @@map("fv_sensor_version_check_events")
+}
+
+model DailySensorVersionCheckMetric {
+  id        String             @id @default(cuid())
+  deviceId  String
+  date      DateTime
+  result    VersionCheckResult
+  count     Int                @default(0)
+  updatedAt DateTime           @updatedAt
+
+  @@unique([deviceId, date, result])
+  @@index([deviceId])
+  @@index([date])
+  @@map("fv_daily_sensor_version_check_metrics")
+}
