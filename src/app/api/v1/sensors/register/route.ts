@@ -60,8 +60,12 @@ export async function POST(request: Request) {
     }
 
     console.error("Unexpected error in POST /api/v1/sensors/register:", error);
+    const detail = error instanceof Error ? error.message : String(error);
     return NextResponse.json(
-      { status: "error", message: "An unexpected error occurred during sensor registration." },
+      {
+        status: "error",
+        message: detail || "An unexpected error occurred during sensor registration.",
+      },
       { status: 500 }
     );
   }

@@ -84,9 +84,10 @@ export async function loginAction(
     redirectPath = "/admin/dashboard";
   } catch (err) {
     console.error("Login action error:", err);
+    const detail = err instanceof Error ? err.message : String(err);
     return {
       status: "error",
-      formError: "An unexpected error occurred during login. Please try again.",
+      formError: detail || "An unexpected error occurred during login. Please try again.",
     };
   }
 
