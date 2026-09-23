@@ -131,7 +131,7 @@ export async function POST(request: Request) {
       );
     }
     console.error("Upload failed in /portal/upload:", err);
-    return NextResponse.json({ status: "error", message: GENERIC_ERROR_MESSAGE }, { status: 500 });
+    return NextResponse.json({ status: "error", message: (err as any)?.message || GENERIC_ERROR_MESSAGE }, { status: 500 });
   }
 }
 

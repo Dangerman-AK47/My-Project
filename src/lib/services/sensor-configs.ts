@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db";
+import { getEnv } from "@/lib/env";
 import { recordAuditEvent } from "@/lib/audit";
 import { getStorageDriver, sanitizeFileName, getMaxUploadBytes } from "@/lib/storage";
 import { semverSchema, semverGt } from "@/lib/validation/semver";
@@ -107,7 +108,7 @@ export async function uploadGlobalConfig(input: UploadGlobalConfigInput) {
     await tx.globalConfigStorageObject.create({
       data: {
         globalConfigId: config.id,
-        storageProvider: "local",
+        storageProvider: getEnv().UPLOAD_STORAGE_PROVIDER,
         storageKey: saved.storagePath,
       },
     });

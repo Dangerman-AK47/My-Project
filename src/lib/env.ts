@@ -11,8 +11,8 @@ const envSchema = z.object({
     .string()
     .min(16, "SESSION_SECRET must be at least 16 characters")
     .default("filevault-super-secure-production-session-secret-key-32chars"),
-  // Storage config
-  UPLOAD_STORAGE_PROVIDER: z.enum(["local", "supabase"]).default("local"),
+  // Storage config: "database" (PostgreSQL binary storage), "local" (filesystem), or "supabase" (cloud bucket)
+  UPLOAD_STORAGE_PROVIDER: z.enum(["local", "supabase", "database"]).default("database"),
   UPLOAD_DIR: z.string().default("./storage/uploads"),
   MAX_FILE_SIZE_MB: z.coerce
     .number()

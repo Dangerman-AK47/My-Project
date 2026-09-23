@@ -11,10 +11,14 @@ export class SensorUnauthorizedError extends Error {
 
 /**
  * Extracts and verifies the bearer token from a sensor request.
- * Finds the matching RegisteredDevice whose tokenHash matches the token.
+ * If targetDeviceId is known, does a fast O(1) indexed lookup on that device.
+ * Otherwise, scans candidate registered devices with tokenHash.
  * On success, updates lastSeenAt (and firstSeenAt if not yet set) asynchronously.
  */
-export async function requireSensorAuth(request: Request): Promise<RegisteredDevice> {
+export async function requireSensorAuth(
+  request: Request,
+  targetDeviceId?: string | null
+): Promise<RegisteredDevice> {
   const authHeader = request.headers.get("authorization") ?? request.headers.get("Authorization");
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     throw new SensorUnauthorizedError("Bearer token is required.");
@@ -25,19 +29,34 @@ export async function requireSensorAuth(request: Request): Promise<RegisteredDev
     throw new SensorUnauthorizedError("Token cannot be empty.");
   }
 
-  // Find candidate sensors with an issued token
-  const candidates = await prisma.registeredDevice.findMany({
-    where: { tokenHash: { not: null } },
-  });
-
   let matchedDevice: RegisteredDevice | null = null;
 
-  for (const candidate of candidates) {
-    if (candidate.tokenHash) {
+  // Fast path: if device ID is known, verify token on that single device
+  if (targetDeviceId) {
+    const candidate = await prisma.registeredDevice.findUnique({
+      where: { deviceId: targetDeviceId.trim().toUpperCase() },
+    });
+    if (candidate && candidate.tokenHash) {
       const match = await bcrypt.compare(token, candidate.tokenHash);
       if (match) {
         matchedDevice = candidate;
-        break;
+      }
+    }
+  }
+
+  // Fallback: scan candidate sensors if not matched via fast path
+  if (!matchedDevice && !targetDeviceId) {
+    const candidates = await prisma.registeredDevice.findMany({
+      where: { tokenHash: { not: null } },
+    });
+
+    for (const candidate of candidates) {
+      if (candidate.tokenHash) {
+        const match = await bcrypt.compare(token, candidate.tokenHash);
+        if (match) {
+          matchedDevice = candidate;
+          break;
+        }
       }
     }
   }
@@ -94,7 +113,7 @@ export async function resolveSensorAuth(
     const rawToken = authHeader.slice(7).trim();
     if (rawToken && rawToken !== "undefined" && rawToken !== "null") {
       try {
-        return await requireSensorAuth(request);
+        return await requireSensorAuth(request, sensorId);
       } catch (err) {
         if (!sensorId) {
           throw err;

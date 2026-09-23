@@ -25,4 +25,18 @@ describe("Storage File Handling & Sanitization", () => {
     assert.equal(sanitizeFileName(""), "file");
     assert.equal(sanitizeFileName("???"), "___");
   });
+
+  it("should generate collision-resistant storage keys with date folders", async () => {
+    const { generateStorageKey } = await import("../src/lib/storage");
+    const key = generateStorageKey("sensor-data.json");
+    assert.match(key, /^\d{4}[/\\]\d{2}[/\\]\d{2}[/\\]\d+-[a-f0-9]{32}\.json$/);
+  });
+
+  it("should provide an active storage driver instance implementing StorageDriver", async () => {
+    const { getStorageDriver } = await import("../src/lib/storage");
+    const driver = getStorageDriver();
+    assert.equal(typeof driver.save, "function");
+    assert.equal(typeof driver.read, "function");
+    assert.equal(typeof driver.delete, "function");
+  });
 });

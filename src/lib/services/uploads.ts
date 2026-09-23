@@ -68,7 +68,7 @@ export async function recordUpload(input: RecordUploadInput) {
     await tx.uploadStorageObject.create({
       data: {
         uploadedFileRecordId: fileRecord.id,
-        storageProvider: input.storageProvider ?? "local",
+        storageProvider: input.storageProvider ?? (process.env.UPLOAD_STORAGE_PROVIDER || "database"),
         storageKey: input.storageKey,
       },
     });

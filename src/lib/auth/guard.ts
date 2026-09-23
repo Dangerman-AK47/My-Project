@@ -1,3 +1,4 @@
+import { cache } from "react";
 import "server-only";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -66,14 +67,13 @@ export interface AuthorizedAdmin {
 /**
  * Full authorization check for protected Server Components / Route Handlers:
  * verifies the token AND re-checks the account is still active in the
- * database. This is the authoritative check — `middleware.ts` only does the
- * fast, stateless signature check as a first line of defense so a request
- * with no/invalid cookie never even reaches page/route code.
+ * database. Wrapped in React cache() so multiple components/layouts in the
+ * same render pass share the single query result.
  *
  * Returns null (does not redirect) so API routes can return 401 JSON instead
  * of a redirect. Page code should use `requireAdminSession` instead.
  */
-export async function getAuthorizedAdmin(): Promise<AuthorizedAdmin | null> {
+export const getAuthorizedAdmin = cache(async function getAuthorizedAdmin(): Promise<AuthorizedAdmin | null> {
   const payload = await getSessionPayload();
   if (!payload) return null;
 
@@ -97,7 +97,7 @@ export async function getAuthorizedAdmin(): Promise<AuthorizedAdmin | null> {
     console.error("Failed to query authorized admin from DB:", err);
     return null;
   }
-}
+});
 
 /** For Server Components/pages: redirects to /admin/login if not authorized. */
 export async function requireAdminSession(): Promise<AuthorizedAdmin> {

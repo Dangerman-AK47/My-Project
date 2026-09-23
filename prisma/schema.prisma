@@ -292,3 +292,14 @@ model DailySensorVersionCheckMetric {
   @@index([date])
   @@map("fv_daily_sensor_version_check_metrics")
 }
+
+model StorageBlob {
+  id         String   @id @default(cuid())
+  storageKey String   @unique
+  data       Bytes
+  byteSize   Int
+  mimeType   String?
+  createdAt  DateTime @default(now())
+
+  @@map("fv_storage_blobs")
+}

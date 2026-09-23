@@ -74,12 +74,19 @@ export async function listDevices(query: DeviceListQuery): Promise<DeviceListRes
 
 /** Counts sensors by status — used by both the sensors API and the dashboard overview. */
 export async function getDeviceStatusCounts(): Promise<DeviceStatsResponse> {
-  const [total, active, deactive] = await Promise.all([
-    prisma.registeredDevice.count(),
-    prisma.registeredDevice.count({ where: { status: "ACTIVE" } }),
-    prisma.registeredDevice.count({ where: { status: "DEACTIVE" } }),
-  ]);
-  return { total, active, deactive };
+  const grouped = await prisma.registeredDevice.groupBy({
+    by: ["status"],
+    _count: { status: true },
+  });
+
+  let active = 0;
+  let deactive = 0;
+  for (const row of grouped) {
+    if (row.status === "ACTIVE") active = row._count.status;
+    else if (row.status === "DEACTIVE") deactive = row._count.status;
+  }
+
+  return { total: active + deactive, active, deactive };
 }
 
 /** Full detail for one sensor, including its 5 most recent uploads and status changes. */
