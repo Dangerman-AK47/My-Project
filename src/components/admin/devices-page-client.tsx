@@ -20,6 +20,7 @@ import type {
   DeviceStatusValue,
   SortDirection,
 } from "@/lib/admin/devices-types";
+import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 
 const SEARCH_DEBOUNCE_MS = 350;
 
@@ -28,6 +29,7 @@ export interface DevicesPageClientProps {
 }
 
 export function DevicesPageClient({ initialData }: DevicesPageClientProps) {
+  useAutoRefresh(30000);
   const { showToast } = useToast();
 
   const [devices, setDevices] = useState<DeviceListItem[]>(initialData.devices);

@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { listDevices } from "@/lib/services/device-queries";
 import { DevicesPageClient } from "@/components/admin/devices-page-client";
 
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: "Sensors — Sensor Platform Admin",
 };

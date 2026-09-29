@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { formatFileSize, formatUploadTimestamp } from "@/lib/upload/format";
+import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 
 export interface GlobalConfigItem {
   id: string;
@@ -34,6 +35,7 @@ export interface GlobalConfigViewProps {
 }
 
 export function GlobalConfigView({ initialConfigs }: GlobalConfigViewProps) {
+  useAutoRefresh(30000);
   const { showToast } = useToast();
 
   const [configs, setConfigs] = useState<GlobalConfigItem[]>(initialConfigs);

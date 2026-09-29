@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { listGlobalConfigs } from "@/lib/services/sensor-configs";
 import { GlobalConfigView, type GlobalConfigItem } from "@/components/admin/global-config-view";
 
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: "Configuration Settings — Sensor Platform Admin",
 };

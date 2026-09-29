@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getAuthorizedAdmin } from "@/lib/auth/guard";
 import { prisma } from "@/lib/db";
 
+export const revalidate = 0;
+
 const DEFAULT_PAGE_SIZE = 20;
 const MAX_PAGE_SIZE = 100;
 

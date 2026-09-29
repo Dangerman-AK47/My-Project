@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { prisma } from "@/lib/db";
 import { FilesPageClient } from "@/components/admin/files-page-client";
 
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: "Uploaded Files — FileVault Admin",
 };

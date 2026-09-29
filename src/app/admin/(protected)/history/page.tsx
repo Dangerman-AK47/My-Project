@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { prisma } from "@/lib/db";
 import { RequestsPageClient } from "@/components/admin/requests-page-client";
 
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: "Registration History — Sensor Platform Admin",
 };

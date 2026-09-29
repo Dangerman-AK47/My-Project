@@ -19,6 +19,9 @@ import {
   listRecentUploads,
 } from "@/lib/services/upload-queries";
 import { formatFileSize, formatUploadTimestamp } from "@/lib/upload/format";
+import { DashboardRefresh } from "@/components/admin/dashboard-refresh";
+
+export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = {
   title: "Overview — Sensor Platform Admin",
@@ -115,6 +118,7 @@ export default async function AdminDashboardOverviewPage() {
 
   return (
     <div className="flex flex-col gap-6">
+      <DashboardRefresh />
       {loadError && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900">
           <p className="font-semibold">Notice: Telemetry synchronization notice</p>

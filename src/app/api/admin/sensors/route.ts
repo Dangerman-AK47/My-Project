@@ -9,6 +9,8 @@ import type {
   SortDirection,
 } from "@/lib/admin/devices-types";
 
+export const revalidate = 0;
+
 const VALID_SORT_FIELDS: DeviceSortField[] = ["registeredAt", "uploadCount", "lastActivity"];
 const VALID_STATUSES: DeviceStatusFilter[] = ["ALL", "ACTIVE", "DEACTIVE"];
 

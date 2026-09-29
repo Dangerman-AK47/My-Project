@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { VersionCheckMetricsView } from "@/components/admin/version-check-metrics-view";
 
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: "Version Check Metrics — Sensor Platform Admin",
 };

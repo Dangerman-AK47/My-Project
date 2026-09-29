@@ -9,6 +9,7 @@ import {
 } from "@/lib/services/sensor-configs";
 
 export const runtime = "nodejs";
+export const revalidate = 0;
 
 export async function GET() {
   const admin = await getAuthorizedAdmin();

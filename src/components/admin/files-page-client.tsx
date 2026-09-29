@@ -9,6 +9,7 @@ import { EmptyState } from "./empty-state";
 import { Pagination } from "./pagination";
 import { TableSkeleton } from "./skeletons";
 import { formatFileSize, formatUploadTimestamp } from "@/lib/upload/format";
+import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 
 export interface UploadedFileItem {
   id: string;
@@ -38,6 +39,7 @@ export function FilesPageClient({
   initialPage,
   pageSize,
 }: FilesPageClientProps) {
+  useAutoRefresh(30000);
   const { showToast } = useToast();
 
   const [files, setFiles] = useState<UploadedFileItem[]>(initialFiles);

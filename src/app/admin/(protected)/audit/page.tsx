@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { prisma } from "@/lib/db";
 import { AuditPageClient, type AuditEventItem } from "@/components/admin/audit-page-client";
 
+export const dynamic = 'force-dynamic';
+
 export const metadata: Metadata = {
   title: "Audit Logs — Sensor Platform Admin",
 };
