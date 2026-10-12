@@ -39,5 +39,11 @@ export function listRecentRequests(limit = 5) {
   return prisma.deviceRegistrationRequest.findMany({
     orderBy: { submittedAt: "desc" },
     take: limit,
+    select: {
+      id: true,
+      deviceId: true,
+      status: true,
+      submittedAt: true,
+    },
   });
 }

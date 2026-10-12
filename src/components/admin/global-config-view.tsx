@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Sliders,
   Upload,
@@ -42,6 +42,10 @@ export function GlobalConfigView({ initialConfigs }: GlobalConfigViewProps) {
   const [uploadLoading, setUploadLoading] = useState(false);
   const [activatingId, setActivatingId] = useState<string | null>(null);
 
+  useEffect(() => {
+    setConfigs(initialConfigs);
+  }, [initialConfigs]);
+
   // Form state
   const [versionInput, setVersionInput] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -51,6 +55,7 @@ export function GlobalConfigView({ initialConfigs }: GlobalConfigViewProps) {
 
   async function handleUpload(e: React.FormEvent) {
     e.preventDefault();
+    if (uploadLoading) return;
     setFormError(null);
 
     if (!selectedFile) {
@@ -103,6 +108,7 @@ export function GlobalConfigView({ initialConfigs }: GlobalConfigViewProps) {
   }
 
   async function handleActivate(configId: string) {
+    if (activatingId) return;
     setActivatingId(configId);
     try {
       const res = await fetch(`/api/admin/configuration/${configId}/activate`, {

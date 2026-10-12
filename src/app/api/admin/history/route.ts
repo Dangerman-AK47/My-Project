@@ -3,6 +3,8 @@ import { getAuthorizedAdmin } from "@/lib/auth/guard";
 import { prisma } from "@/lib/db";
 import type { RegistrationRequestStatus } from "@prisma/client";
 
+export const revalidate = 0;
+
 const VALID_STATUSES = ["ALL", "PENDING", "APPROVED", "REJECTED", "CANCELLED", "AUTO_APPROVED"] as const;
 type StatusFilter = (typeof VALID_STATUSES)[number];
 
@@ -37,7 +39,13 @@ export async function GET(request: Request): Promise<NextResponse> {
         orderBy: { submittedAt: "desc" },
         skip: (pageParam - 1) * pageSizeParam,
         take: pageSizeParam,
-        include: {
+        select: {
+          id: true,
+          deviceId: true,
+          status: true,
+          submittedAt: true,
+          reviewedAt: true,
+          reviewReason: true,
           reviewedByAdmin: { select: { username: true } },
         },
       }),

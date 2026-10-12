@@ -9,6 +9,7 @@ import { EmptyState } from "./empty-state";
 import { Pagination } from "./pagination";
 import { TableSkeleton } from "./skeletons";
 import { formatUploadTimestamp } from "@/lib/upload/format";
+import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 
 export interface RegistrationRequest {
   id: string;
@@ -55,6 +56,7 @@ export function RequestsPageClient({
   const [loading, setLoading] = useState(false);
 
   const didMountRef = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -65,28 +67,57 @@ export function RequestsPageClient({
   }, [searchInput]);
 
   const fetchRequests = useCallback(
-    async (params: { search: string; status: string; page: number }) => {
-      setLoading(true);
+    async (
+      params: { search: string; status: string; page: number },
+      options?: { silent?: boolean }
+    ) => {
+      const silent = options?.silent ?? false;
+      if (!silent) {
+        abortControllerRef.current?.abort();
+      }
+      const controller = new AbortController();
+      if (!silent) {
+        abortControllerRef.current = controller;
+        setLoading(true);
+      }
       try {
         const url = new URL("/api/admin/history", window.location.origin);
         if (params.search) url.searchParams.set("q", params.search);
         if (params.status !== "ALL") url.searchParams.set("status", params.status);
         url.searchParams.set("page", String(params.page));
         url.searchParams.set("pageSize", String(pageSize));
-        const res = await fetch(url.toString());
+        const res = await fetch(url.toString(), {
+          signal: controller.signal,
+          cache: "no-store",
+        });
         if (!res.ok) throw new Error();
         const json = await res.json();
         setRequests(json.requests);
         setTotal(json.total);
         setPage(json.page);
-      } catch {
-        showToast({ variant: "error", message: "Could not load registration history. Please try again." });
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        if (!silent) {
+          showToast({ variant: "error", message: "Could not load registration history. Please try again." });
+        }
       } finally {
-        setLoading(false);
+        if (!silent && abortControllerRef.current === controller) {
+          setLoading(false);
+        }
       }
     },
     [pageSize, showToast]
   );
+
+  useAutoRefresh(30000, () =>
+    fetchRequests({ search: appliedSearch, status: statusFilter, page }, { silent: true })
+  );
+
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort();
+    };
+  }, []);
 
   useEffect(() => {
     if (!didMountRef.current) {

@@ -1,3 +1,4 @@
+import { cache } from "react";
 import type { DeviceStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import type {
@@ -9,6 +10,11 @@ import type {
   DeviceStatsResponse,
   SortDirection,
 } from "@/lib/admin/devices-types";
+
+const safeCache =
+  typeof cache === "function"
+    ? cache
+    : <T extends (...args: any[]) => any>(fn: T): T => fn;
 
 const DEFAULT_PAGE_SIZE = 10;
 const MAX_PAGE_SIZE = 100;
@@ -50,6 +56,19 @@ export async function listDevices(query: DeviceListQuery): Promise<DeviceListRes
       orderBy: buildOrderBy(sortBy, sortDir),
       skip: (page - 1) * pageSize,
       take: pageSize,
+      select: {
+        id: true,
+        deviceId: true,
+        status: true,
+        registeredAt: true,
+        updatedAt: true,
+        lastUploadAt: true,
+        uploadCount: true,
+        totalStorageBytes: true,
+        firstSeenAt: true,
+        lastSeenAt: true,
+        tokenHash: true,
+      },
     }),
     prisma.registeredDevice.count({ where }),
   ]);
@@ -90,11 +109,22 @@ export async function getDeviceStatusCounts(): Promise<DeviceStatsResponse> {
 }
 
 /** Full detail for one sensor, including its 5 most recent uploads and status changes. */
-export async function getDeviceDetail(id: string): Promise<DeviceDetailResponse | null> {
+export const getDeviceDetail = safeCache(async function getDeviceDetail(id: string): Promise<DeviceDetailResponse | null> {
   const device = await prisma.registeredDevice.findUnique({
     where: { id },
     include: {
-      uploadedFiles: { orderBy: { uploadedAt: "desc" }, take: 5 },
+      uploadedFiles: {
+        orderBy: { uploadedAt: "desc" },
+        take: 5,
+        select: {
+          id: true,
+          uploadRecordId: true,
+          originalFileName: true,
+          fileSizeBytes: true,
+          mimeType: true,
+          uploadedAt: true,
+        },
+      },
       statusEvents: {
         orderBy: { createdAt: "desc" },
         take: 5,
@@ -139,4 +169,4 @@ export async function getDeviceDetail(id: string): Promise<DeviceDetailResponse 
       createdAt: event.createdAt.toISOString(),
     })),
   };
-}
+});

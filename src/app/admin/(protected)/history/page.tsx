@@ -15,7 +15,15 @@ export default async function RegistrationHistoryPage() {
     prisma.deviceRegistrationRequest.findMany({
       orderBy: { submittedAt: "desc" },
       take: PAGE_SIZE,
-      include: { reviewedByAdmin: { select: { username: true } } },
+      select: {
+        id: true,
+        deviceId: true,
+        status: true,
+        submittedAt: true,
+        reviewedAt: true,
+        reviewReason: true,
+        reviewedByAdmin: { select: { username: true } },
+      },
     }),
     prisma.deviceRegistrationRequest.count(),
   ]);

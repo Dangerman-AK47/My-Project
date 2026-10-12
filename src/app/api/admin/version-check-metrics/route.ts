@@ -56,7 +56,10 @@ export async function GET(request: Request) {
         lte: toDate,
       },
     },
-    include: {
+    select: {
+      createdAt: true,
+      deviceId: true,
+      result: true,
       registeredDevice: {
         select: {
           status: true,

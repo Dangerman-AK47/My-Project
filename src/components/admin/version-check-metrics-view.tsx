@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { BarChart3, Calendar, Loader2 } from "lucide-react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { BarChart3, Calendar } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { TableSkeleton } from "./skeletons";
+import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 
 export interface DailySummaryItem {
   date: string;
@@ -25,23 +27,51 @@ export function VersionCheckMetricsView() {
   const [to, setTo] = useState(todayStr);
   const [data, setData] = useState<DailySummaryItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
-  async function loadMetrics(fromDate = from, toDate = to) {
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/admin/version-check-metrics?from=${fromDate}&to=${toDate}`);
-      if (!res.ok) throw new Error();
-      const json = await res.json();
-      setData(json.dailySummary || []);
-    } catch {
-      setData([]);
-    } finally {
-      setLoading(false);
-    }
-  }
+  const loadMetrics = useCallback(
+    async (fromDate = from, toDate = to, options?: { silent?: boolean }) => {
+      const silent = options?.silent ?? false;
+      if (!silent) {
+        abortControllerRef.current?.abort();
+      }
+      const controller = new AbortController();
+      if (!silent) {
+        abortControllerRef.current = controller;
+        setLoading(true);
+      }
+      try {
+        const res = await fetch(
+          `/api/admin/version-check-metrics?from=${fromDate}&to=${toDate}`,
+          {
+            signal: controller.signal,
+            cache: "no-store",
+          }
+        );
+        if (!res.ok) throw new Error();
+        const json = await res.json();
+        setData(json.dailySummary || []);
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        if (!silent) {
+          setData([]);
+        }
+      } finally {
+        if (!silent && abortControllerRef.current === controller) {
+          setLoading(false);
+        }
+      }
+    },
+    [from, to]
+  );
+
+  useAutoRefresh(30000, () => loadMetrics(from, to, { silent: true }));
 
   useEffect(() => {
     void loadMetrics(from, to);
+    return () => {
+      abortControllerRef.current?.abort();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -106,7 +136,7 @@ export function VersionCheckMetricsView() {
                 variant="primary"
                 className="h-8 px-3 text-xs"
                 onClick={() => loadMetrics()}
-                disabled={loading}
+                loading={loading}
               >
                 Apply
               </Button>
@@ -119,6 +149,7 @@ export function VersionCheckMetricsView() {
               variant="secondary"
               className="h-8 text-xs"
               onClick={() => setQuickRange(1)}
+              disabled={loading}
             >
               Today
             </Button>
@@ -127,6 +158,7 @@ export function VersionCheckMetricsView() {
               variant="secondary"
               className="h-8 text-xs"
               onClick={() => setQuickRange(7)}
+              disabled={loading}
             >
               Last 7 Days
             </Button>
@@ -135,6 +167,7 @@ export function VersionCheckMetricsView() {
               variant="secondary"
               className="h-8 text-xs"
               onClick={() => setQuickRange(30)}
+              disabled={loading}
             >
               Last 30 Days
             </Button>
@@ -172,10 +205,7 @@ export function VersionCheckMetricsView() {
         </div>
 
         {loading ? (
-          <div className="p-12 text-center text-slate-500">
-            <Loader2 className="mx-auto h-8 w-8 animate-spin text-accent-600 mb-2" />
-            <p className="text-sm font-medium">Loading metrics...</p>
-          </div>
+          <TableSkeleton rows={7} columns={8} />
         ) : data.length === 0 ? (
           <div className="p-10 text-center text-slate-500">
             <BarChart3 className="mx-auto h-8 w-8 text-slate-400 mb-2" />

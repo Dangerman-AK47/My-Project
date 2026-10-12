@@ -15,7 +15,18 @@ export default async function AdminFilesPage() {
     prisma.uploadedFileRecord.findMany({
       orderBy: { uploadedAt: "desc" },
       take: PAGE_SIZE,
-      include: { registeredDevice: { select: { deviceId: true } } },
+      select: {
+        id: true,
+        uploadRecordId: true,
+        deviceId: true,
+        originalFileName: true,
+        mimeType: true,
+        fileExtension: true,
+        fileSizeBytes: true,
+        uploadedAt: true,
+        uploadStatus: true,
+        storageKey: true,
+      },
     }),
     prisma.uploadedFileRecord.count(),
   ]);

@@ -1,8 +1,9 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LogOut, ShieldCheck, X } from "lucide-react";
+import { Loader2, LogOut, ShieldCheck, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { logoutAction } from "@/lib/auth/actions";
 import { ADMIN_NAV_ITEMS, isNavItemActive } from "./nav-config";
@@ -12,28 +13,62 @@ export interface SidebarProps {
   onClose: () => void;
 }
 
-function SidebarContents({ pathname, onNavigate }: { pathname: string; onNavigate?: () => void }) {
+function SidebarContents({
+  pathname,
+  pendingHref,
+  onSelectHref,
+  onNavigate,
+}: {
+  pathname: string;
+  pendingHref: string | null;
+  onSelectHref: (href: string) => void;
+  onNavigate?: () => void;
+}) {
+  const effectivePathname = pendingHref ?? pathname;
+
   return (
     <>
       <nav className="flex flex-1 flex-col gap-1 px-3">
         {ADMIN_NAV_ITEMS.map((item) => {
-          const active = isNavItemActive(item, pathname);
+          const active = isNavItemActive(item, effectivePathname);
+          const isPending = pendingHref === item.href && pathname !== item.href;
           const Icon = item.icon;
           return (
             <Link
               key={item.href}
               href={item.href}
-              onClick={onNavigate}
+              prefetch={item.href.startsWith("/admin/")}
+              onClick={(e) => {
+                if (
+                  !e.metaKey &&
+                  !e.ctrlKey &&
+                  !e.shiftKey &&
+                  !e.altKey &&
+                  e.button === 0 &&
+                  item.href !== pathname
+                ) {
+                  onSelectHref(item.href);
+                }
+                onNavigate?.();
+              }}
               aria-current={active ? "page" : undefined}
               className={cn(
-                "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                "flex items-center justify-between gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors duration-150 motion-reduce:transition-none",
                 active
                   ? "bg-navy-800 text-white"
                   : "text-slate-300 hover:bg-navy-800 hover:text-white"
               )}
             >
-              <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
-              {item.label}
+              <span className="flex items-center gap-3 truncate">
+                <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+                <span className="truncate">{item.label}</span>
+              </span>
+              {isPending && (
+                <Loader2
+                  className="h-3.5 w-3.5 shrink-0 animate-spin text-slate-300 motion-reduce:animate-none"
+                  aria-label="Loading section"
+                />
+              )}
             </Link>
           );
         })}
@@ -42,7 +77,7 @@ function SidebarContents({ pathname, onNavigate }: { pathname: string; onNavigat
       <form action={logoutAction} className="px-3 pb-4">
         <button
           type="submit"
-          className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-slate-300 transition-colors hover:bg-navy-800 hover:text-white"
+          className="flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-slate-300 transition-colors duration-150 hover:bg-navy-800 hover:text-white motion-reduce:transition-none"
         >
           <LogOut className="h-4 w-4 shrink-0" aria-hidden="true" />
           Logout
@@ -54,6 +89,11 @@ function SidebarContents({ pathname, onNavigate }: { pathname: string; onNavigat
 
 export function Sidebar({ mobileOpen, onClose }: SidebarProps) {
   const pathname = usePathname();
+  const [pendingHref, setPendingHref] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPendingHref(null);
+  }, [pathname]);
 
   return (
     <>
@@ -66,7 +106,11 @@ export function Sidebar({ mobileOpen, onClose }: SidebarProps) {
             Secure admin session
           </p>
         </div>
-        <SidebarContents pathname={pathname} />
+        <SidebarContents
+          pathname={pathname}
+          pendingHref={pendingHref}
+          onSelectHref={setPendingHref}
+        />
       </aside>
 
       {/* Mobile: overlay drawer, only rendered while open */}
@@ -96,7 +140,12 @@ export function Sidebar({ mobileOpen, onClose }: SidebarProps) {
                 <X className="h-5 w-5" />
               </button>
             </div>
-            <SidebarContents pathname={pathname} onNavigate={onClose} />
+            <SidebarContents
+              pathname={pathname}
+              pendingHref={pendingHref}
+              onSelectHref={setPendingHref}
+              onNavigate={onClose}
+            />
           </aside>
         </div>
       )}

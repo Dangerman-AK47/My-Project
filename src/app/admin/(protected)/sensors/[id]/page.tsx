@@ -3,6 +3,8 @@ import type { Metadata } from "next";
 import { getDeviceDetail } from "@/lib/services/device-queries";
 import { SensorDetailView } from "@/components/admin/sensor-detail-view";
 
+export const dynamic = "force-dynamic";
+
 interface Props {
   params: { id: string };
 }

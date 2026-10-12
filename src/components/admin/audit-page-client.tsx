@@ -1,11 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { FileText, ShieldAlert, User } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { useToast } from "@/components/ui/toast";
 import { Pagination } from "./pagination";
+import { TableSkeleton } from "./skeletons";
 import { formatUploadTimestamp } from "@/lib/upload/format";
+import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 
 export interface AuditEventItem {
   id: string;
@@ -26,22 +29,96 @@ export interface AuditPageClientProps {
   pageSize: number;
 }
 
+const KNOWN_AUDIT_ACTIONS = [
+  "SENSOR_REGISTERED",
+  "DEVICE_STATUS_UPDATED",
+  "SENSOR_DELETED",
+  "SENSOR_TOKEN_REVOKED",
+  "GLOBAL_CONFIG_UPLOADED",
+  "GLOBAL_CONFIG_ACTIVATED",
+];
+
 export function AuditPageClient({
   initialEvents,
   initialTotal,
   initialPage,
   pageSize,
 }: AuditPageClientProps) {
-  const [events] = useState<AuditEventItem[]>(initialEvents);
+  const { showToast } = useToast();
+
+  const [events, setEvents] = useState<AuditEventItem[]>(initialEvents);
+  const [total, setTotal] = useState(initialTotal);
   const [page, setPage] = useState(initialPage);
   const [actionFilter, setActionFilter] = useState("ALL");
+  const [loading, setLoading] = useState(false);
 
-  const filtered = events.filter((e) => {
-    if (actionFilter !== "ALL" && e.action !== actionFilter) return false;
-    return true;
-  });
+  const didMountRef = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
-  const actions = Array.from(new Set(events.map((e) => e.action)));
+  const fetchAuditEvents = useCallback(
+    async (
+      params: { action: string; page: number },
+      options?: { silent?: boolean }
+    ) => {
+      const silent = options?.silent ?? false;
+      if (!silent) {
+        abortControllerRef.current?.abort();
+      }
+      const controller = new AbortController();
+      if (!silent) {
+        abortControllerRef.current = controller;
+        setLoading(true);
+      }
+      try {
+        const url = new URL("/api/admin/audit", window.location.origin);
+        if (params.action !== "ALL") url.searchParams.set("action", params.action);
+        url.searchParams.set("page", String(params.page));
+        url.searchParams.set("pageSize", String(pageSize));
+
+        const res = await fetch(url.toString(), {
+          signal: controller.signal,
+          cache: "no-store",
+        });
+        if (!res.ok) throw new Error();
+        const json = await res.json();
+        setEvents(json.events);
+        setTotal(json.total);
+        setPage(json.page);
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        if (!silent) {
+          showToast({ variant: "error", message: "Could not load audit logs. Please try again." });
+        }
+      } finally {
+        if (!silent && abortControllerRef.current === controller) {
+          setLoading(false);
+        }
+      }
+    },
+    [pageSize, showToast]
+  );
+
+  useAutoRefresh(30000, () =>
+    fetchAuditEvents({ action: actionFilter, page }, { silent: true })
+  );
+
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!didMountRef.current) {
+      didMountRef.current = true;
+      return;
+    }
+    void fetchAuditEvents({ action: actionFilter, page });
+  }, [actionFilter, page, fetchAuditEvents]);
+
+  const actions = Array.from(
+    new Set([...KNOWN_AUDIT_ACTIONS, ...events.map((e) => e.action)])
+  );
 
   return (
     <div className="flex flex-col gap-6">
@@ -64,7 +141,10 @@ export function AuditPageClient({
           <select
             id="action-filter"
             value={actionFilter}
-            onChange={(e) => setActionFilter(e.target.value)}
+            onChange={(e) => {
+              setActionFilter(e.target.value);
+              setPage(1);
+            }}
             className="h-9 rounded-md border border-slate-200 bg-white px-3 text-sm text-slate-700"
           >
             <option value="ALL">All Actions</option>
@@ -75,12 +155,16 @@ export function AuditPageClient({
             ))}
           </select>
         </div>
-        <p className="text-xs text-slate-500">Showing {filtered.length} of {initialTotal} events</p>
+        <p className="text-xs text-slate-500">
+          Showing {events.length} of {total} events
+        </p>
       </div>
 
       {/* Audit Events Table */}
       <Card className="overflow-hidden">
-        {filtered.length === 0 ? (
+        {loading ? (
+          <TableSkeleton rows={pageSize} columns={5} />
+        ) : events.length === 0 ? (
           <div className="p-8 text-center text-slate-500">
             <ShieldAlert className="mx-auto h-8 w-8 text-slate-400 mb-2" />
             <p className="font-medium">No admin audit events found</p>
@@ -98,7 +182,7 @@ export function AuditPageClient({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filtered.map((e) => (
+                {events.map((e) => (
                   <tr key={e.id} className="hover:bg-slate-50/50">
                     <td className="py-3 px-4 text-xs font-mono text-slate-600 whitespace-nowrap">
                       {formatUploadTimestamp(new Date(e.createdAt)).combined}
@@ -135,8 +219,8 @@ export function AuditPageClient({
         )}
       </Card>
 
-      {initialTotal > pageSize && (
-        <Pagination page={page} pageSize={pageSize} total={initialTotal} onPageChange={setPage} />
+      {!loading && total > pageSize && (
+        <Pagination page={page} pageSize={pageSize} total={total} onPageChange={setPage} />
       )}
     </div>
   );

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -19,18 +19,24 @@ import { ConfirmStatusDialog } from "./confirm-status-dialog";
 import { ConfirmDeleteDialog } from "./confirm-delete-dialog";
 import { formatFileSize, formatUploadTimestamp } from "@/lib/upload/format";
 import type { DeviceDetailResponse, DeviceStatusValue } from "@/lib/admin/devices-types";
+import { useAutoRefresh } from "@/hooks/useAutoRefresh";
 
 export interface SensorDetailViewProps {
   initialData: DeviceDetailResponse;
 }
 
 export function SensorDetailView({ initialData }: SensorDetailViewProps) {
+  useAutoRefresh(30000);
   const router = useRouter();
   const { showToast } = useToast();
 
   const [device, setDevice] = useState(initialData.device);
   const [statusUpdating, setStatusUpdating] = useState(false);
   const [confirmStatusDialogOpen, setConfirmStatusDialogOpen] = useState(false);
+
+  useEffect(() => {
+    setDevice(initialData.device);
+  }, [initialData.device]);
 
   // Delete state
   const [confirmDeleteDialogOpen, setConfirmDeleteDialogOpen] = useState(false);

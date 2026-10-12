@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { FileStack, Trash2, Download, Search } from "lucide-react";
+import { FileStack, Trash2, Download, Search, Loader2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/toast";
@@ -39,7 +39,6 @@ export function FilesPageClient({
   initialPage,
   pageSize,
 }: FilesPageClientProps) {
-  useAutoRefresh(30000);
   const { showToast } = useToast();
 
   const [files, setFiles] = useState<UploadedFileItem[]>(initialFiles);
@@ -53,6 +52,7 @@ export function FilesPageClient({
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
   const didMountRef = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -63,27 +63,53 @@ export function FilesPageClient({
   }, [searchInput]);
 
   const fetchFiles = useCallback(
-    async (params: { search: string; page: number }) => {
-      setLoading(true);
+    async (params: { search: string; page: number }, options?: { silent?: boolean }) => {
+      const silent = options?.silent ?? false;
+      if (!silent) {
+        abortControllerRef.current?.abort();
+      }
+      const controller = new AbortController();
+      if (!silent) {
+        abortControllerRef.current = controller;
+        setLoading(true);
+      }
       try {
         const url = new URL("/api/admin/files", window.location.origin);
         if (params.search) url.searchParams.set("q", params.search);
         url.searchParams.set("page", String(params.page));
         url.searchParams.set("pageSize", String(pageSize));
-        const res = await fetch(url.toString());
+        const res = await fetch(url.toString(), {
+          signal: controller.signal,
+          cache: "no-store",
+        });
         if (!res.ok) throw new Error();
         const json = await res.json();
         setFiles(json.files);
         setTotal(json.total);
         setPage(json.page);
-      } catch {
-        showToast({ variant: "error", message: "Could not load files. Please try again." });
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        if (!silent) {
+          showToast({ variant: "error", message: "Could not load files. Please try again." });
+        }
       } finally {
-        setLoading(false);
+        if (!silent && abortControllerRef.current === controller) {
+          setLoading(false);
+        }
       }
     },
     [pageSize, showToast]
   );
+
+  useAutoRefresh(30000, () =>
+    fetchFiles({ search: appliedSearch, page }, { silent: true })
+  );
+
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort();
+    };
+  }, []);
 
   useEffect(() => {
     if (!didMountRef.current) {
@@ -203,7 +229,11 @@ export function FilesPageClient({
                           disabled={downloadingId === file.id}
                           aria-label={`Download ${file.originalFileName}`}
                         >
-                          <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                          {downloadingId === file.id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                          ) : (
+                            <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                          )}
                         </Button>
                         <Button
                           size="sm"
@@ -213,7 +243,11 @@ export function FilesPageClient({
                           disabled={deletingId === file.id}
                           aria-label={`Delete ${file.originalFileName}`}
                         >
-                          <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                          {deletingId === file.id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin text-danger-600" aria-hidden="true" />
+                          ) : (
+                            <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                          )}
                         </Button>
                       </div>
                     </td>
@@ -254,13 +288,17 @@ export function FilesPageClient({
               </div>
             </div>
             <div className="mt-5 flex justify-end gap-3">
-              <Button variant="secondary" onClick={() => setConfirmDeleteId(null)}>
+              <Button
+                variant="secondary"
+                onClick={() => setConfirmDeleteId(null)}
+                disabled={deletingId === confirmFile.id}
+              >
                 Cancel
               </Button>
               <Button
                 variant="danger"
                 onClick={() => handleDelete(confirmFile.id)}
-                disabled={deletingId === confirmFile.id}
+                loading={deletingId === confirmFile.id}
               >
                 Delete File
               </Button>

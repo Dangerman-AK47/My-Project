@@ -29,7 +29,6 @@ export interface DevicesPageClientProps {
 }
 
 export function DevicesPageClient({ initialData }: DevicesPageClientProps) {
-  useAutoRefresh(30000);
   const { showToast } = useToast();
 
   const [devices, setDevices] = useState<DeviceListItem[]>(initialData.devices);
@@ -54,17 +53,29 @@ export function DevicesPageClient({ initialData }: DevicesPageClientProps) {
   const [detailsRowId, setDetailsRowId] = useState<string | null>(null);
 
   const didMountRef = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const fetchDevices = useCallback(
-    async (params: {
-      search: string;
-      status: DeviceStatusFilter;
-      sortBy: DeviceSortField;
-      sortDir: SortDirection;
-      page: number;
-    }) => {
-      setLoading(true);
-      setError(undefined);
+    async (
+      params: {
+        search: string;
+        status: DeviceStatusFilter;
+        sortBy: DeviceSortField;
+        sortDir: SortDirection;
+        page: number;
+      },
+      options?: { silent?: boolean }
+    ) => {
+      const silent = options?.silent ?? false;
+      if (!silent) {
+        abortControllerRef.current?.abort();
+      }
+      const controller = new AbortController();
+      if (!silent) {
+        abortControllerRef.current = controller;
+        setLoading(true);
+        setError(undefined);
+      }
       try {
         const url = new URL("/api/admin/sensors", window.location.origin);
         if (params.search) url.searchParams.set("q", params.search);
@@ -74,20 +85,41 @@ export function DevicesPageClient({ initialData }: DevicesPageClientProps) {
         url.searchParams.set("page", String(params.page));
         url.searchParams.set("pageSize", String(pageSize));
 
-        const response = await fetch(url.toString());
+        const response = await fetch(url.toString(), {
+          signal: controller.signal,
+          cache: "no-store",
+        });
         if (!response.ok) throw new Error("Failed to load sensors.");
         const json = (await response.json()) as DeviceListResponse;
         setDevices(json.devices);
         setTotal(json.total);
         setPage(json.page);
-      } catch {
-        setError("Could not load sensors. Please try again.");
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        if (!silent) {
+          setError("Could not load sensors. Please try again.");
+        }
       } finally {
-        setLoading(false);
+        if (!silent && abortControllerRef.current === controller) {
+          setLoading(false);
+        }
       }
     },
     [pageSize]
   );
+
+  useAutoRefresh(30000, () =>
+    fetchDevices(
+      { search: appliedSearch, status: statusFilter, sortBy, sortDir, page },
+      { silent: true }
+    )
+  );
+
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort();
+    };
+  }, []);
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -102,7 +134,7 @@ export function DevicesPageClient({ initialData }: DevicesPageClientProps) {
       didMountRef.current = true;
       return;
     }
-    fetchDevices({ search: appliedSearch, status: statusFilter, sortBy, sortDir, page });
+    void fetchDevices({ search: appliedSearch, status: statusFilter, sortBy, sortDir, page });
   }, [appliedSearch, statusFilter, sortBy, sortDir, page, fetchDevices]);
 
   function handleStatusFilterChange(value: DeviceStatusFilter) {
@@ -117,6 +149,7 @@ export function DevicesPageClient({ initialData }: DevicesPageClientProps) {
   }
 
   async function applyStatusChange(device: DeviceListItem, nextStatus: DeviceStatusValue) {
+    if (statusUpdatingId) return;
     setStatusUpdatingId(device.id);
     try {
       const response = await fetch(`/api/admin/sensors/${device.id}/status`, {
@@ -162,8 +195,9 @@ export function DevicesPageClient({ initialData }: DevicesPageClientProps) {
 
   function handleConfirmDisable() {
     if (!confirmTarget) return;
-    void applyStatusChange(confirmTarget.device, confirmTarget.nextStatus);
+    const target = confirmTarget;
     setConfirmTarget(null);
+    void applyStatusChange(target.device, target.nextStatus);
   }
 
   function handleCancelConfirm() {

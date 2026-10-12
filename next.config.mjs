@@ -6,6 +6,7 @@ const nextConfig = {
   // default so multi-megabyte device file uploads don't get rejected
   // before reaching our own MAX_FILE_SIZE check in lib/storage.ts.
   experimental: {
+    optimizePackageImports: ["lucide-react"],
     serverActions: {
       bodySizeLimit: "25mb",
     },

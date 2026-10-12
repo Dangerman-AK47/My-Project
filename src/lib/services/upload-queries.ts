@@ -10,16 +10,18 @@ const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Overall upload counters for the dashboard's stat cards. */
 export async function getUploadSummaryStats(): Promise<UploadSummaryStats> {
-  const [totalFiles, sizeAgg, last24h] = await Promise.all([
-    prisma.uploadedFileRecord.count(),
-    prisma.uploadedFileRecord.aggregate({ _sum: { fileSizeBytes: true } }),
+  const [agg, last24h] = await Promise.all([
+    prisma.uploadedFileRecord.aggregate({
+      _count: { _all: true },
+      _sum: { fileSizeBytes: true },
+    }),
     prisma.uploadedFileRecord.count({
       where: { uploadedAt: { gte: new Date(Date.now() - ONE_DAY_MS) } },
     }),
   ]);
   return {
-    totalFiles,
-    totalStorageBytes: sizeAgg._sum.fileSizeBytes ?? 0,
+    totalFiles: agg._count._all,
+    totalStorageBytes: agg._sum.fileSizeBytes ?? 0,
     last24h,
   };
 }
@@ -29,7 +31,14 @@ export function listRecentUploads(limit = 5) {
   return prisma.uploadedFileRecord.findMany({
     orderBy: { uploadedAt: "desc" },
     take: limit,
-    include: { registeredDevice: { select: { deviceId: true } } },
+    select: {
+      id: true,
+      originalFileName: true,
+      fileSizeBytes: true,
+      uploadedAt: true,
+      deviceId: true,
+      registeredDevice: { select: { deviceId: true } },
+    },
   });
 }
 
