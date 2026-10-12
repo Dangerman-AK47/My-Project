@@ -31,10 +31,15 @@ export async function requireSensorAuth(
 
   let matchedDevice: RegisteredDevice | null = null;
 
-  // Fast path: if device ID is known, verify token on that single device
-  if (targetDeviceId) {
+  const resolvedDeviceId =
+    targetDeviceId ||
+    request.headers.get("x-sensor-id") ||
+    request.headers.get("x-device-id");
+
+  // Fast path: if device ID is known (via param or X-Sensor-Id header), verify token in O(1)
+  if (resolvedDeviceId) {
     const candidate = await prisma.registeredDevice.findUnique({
-      where: { deviceId: targetDeviceId.trim().toUpperCase() },
+      where: { deviceId: resolvedDeviceId.trim().toUpperCase() },
     });
     if (candidate && candidate.tokenHash) {
       const match = await bcrypt.compare(token, candidate.tokenHash);
