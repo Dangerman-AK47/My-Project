@@ -41,8 +41,15 @@ export async function createSession(admin: {
   });
 }
 
+const ADMIN_VERIFY_TTL_MS = 30_000;
+const verifiedAdminCache = new Map<
+  string,
+  { admin: AuthorizedAdmin; expiresAt: number }
+>();
+
 /** Clears the session cookie. Call from the logout action/route. */
 export function clearSession(): void {
+  verifiedAdminCache.clear();
   cookies().set(SESSION_COOKIE_NAME, "", {
     httpOnly: true,
     secure: isProduction,
@@ -68,7 +75,9 @@ export interface AuthorizedAdmin {
  * Full authorization check for protected Server Components / Route Handlers:
  * verifies the token AND re-checks the account is still active in the
  * database. Wrapped in React cache() so multiple components/layouts in the
- * same render pass share the single query result.
+ * same render pass share the single query result, with a short per-admin-ID
+ * TTL to avoid redundant cross-region DB lookups on rapid tab switches while
+ * always verifying the request's HTTP-only JWT signature first.
  *
  * Returns null (does not redirect) so API routes can return 401 JSON instead
  * of a redirect. Page code should use `requireAdminSession` instead.
@@ -77,6 +86,12 @@ export const getAuthorizedAdmin = cache(async function getAuthorizedAdmin(): Pro
   const payload = await getSessionPayload();
   if (!payload) return null;
 
+  const now = Date.now();
+  const cached = verifiedAdminCache.get(payload.sub);
+  if (cached && cached.expiresAt > now) {
+    return cached.admin;
+  }
+
   try {
     const account = await prisma.adminAccount.findUnique({
       where: { id: payload.sub },
@@ -84,6 +99,7 @@ export const getAuthorizedAdmin = cache(async function getAuthorizedAdmin(): Pro
     });
 
     if (!account || !account.isActive) {
+      verifiedAdminCache.delete(payload.sub);
       try {
         clearSession();
       } catch {
@@ -92,7 +108,16 @@ export const getAuthorizedAdmin = cache(async function getAuthorizedAdmin(): Pro
       return null;
     }
 
-    return { id: account.id, username: account.username, role: account.role };
+    const authorized: AuthorizedAdmin = {
+      id: account.id,
+      username: account.username,
+      role: account.role,
+    };
+    verifiedAdminCache.set(payload.sub, {
+      admin: authorized,
+      expiresAt: now + ADMIN_VERIFY_TTL_MS,
+    });
+    return authorized;
   } catch (err) {
     console.error("Failed to query authorized admin from DB:", err);
     return null;

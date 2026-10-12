@@ -37,6 +37,8 @@ function getSanitizedDatabaseUrl(): string | undefined {
     }
     if (!url.includes("connection_limit=")) {
       paramsToAdd.push("connection_limit=10");
+    } else {
+      url = url.replace(/connection_limit=[1-9](?!\d)/g, "connection_limit=10");
     }
 
     if (paramsToAdd.length > 0) {

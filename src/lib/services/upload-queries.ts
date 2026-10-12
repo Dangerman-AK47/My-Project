@@ -27,8 +27,8 @@ export async function getUploadSummaryStats(): Promise<UploadSummaryStats> {
 }
 
 /** Most recent uploads, with the owning device's Device ID, for the dashboard's "recent uploads" card. */
-export function listRecentUploads(limit = 5) {
-  return prisma.uploadedFileRecord.findMany({
+export async function listRecentUploads(limit = 5) {
+  const rows = await prisma.uploadedFileRecord.findMany({
     orderBy: { uploadedAt: "desc" },
     take: limit,
     select: {
@@ -37,9 +37,12 @@ export function listRecentUploads(limit = 5) {
       fileSizeBytes: true,
       uploadedAt: true,
       deviceId: true,
-      registeredDevice: { select: { deviceId: true } },
     },
   });
+  return rows.map((r) => ({
+    ...r,
+    registeredDevice: { deviceId: r.deviceId },
+  }));
 }
 
 export interface DailyUploadCount {
